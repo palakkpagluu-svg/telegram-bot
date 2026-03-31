@@ -1,100 +1,82 @@
 import os
 import qrcode
-from io import BytesIO
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = 7705209352
 UPI_ID = "niteshextema@fam"
-NAME = "Nitesh"
 
-users = {}
+# ===== QR GENERATE =====
+def generate_qr():
+    upi_link = f"upi://pay?pa={UPI_ID}&pn=Payment"
+    qr = qrcode.make(upi_link)
+    qr.save("qr.png")
 
 # ===== START =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
-        ["1K Followers - ₹10"],
-        ["5K Followers - ₹50"],
-        ["10K Followers - ₹100"],
-        ["💬 Support"]
+        [InlineKeyboardButton("1K Followers - ₹10", callback_data="1k")],
+        [InlineKeyboardButton("5K Followers - ₹50", callback_data="5k")],
+        [InlineKeyboardButton("10K Followers - ₹100", callback_data="10k")],
+        [InlineKeyboardButton("Payment Screenshot", callback_data="pay")],
+        [InlineKeyboardButton("Support", callback_data="support")]
     ]
-    await update.message.reply_text(
-        "🔥 Welcome!\nSelect a package:",
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    )
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Welcome! Choose option:", reply_markup=reply_markup)
 
-# ===== QR GENERATE =====
-def generate_qr():
-    upi_link = f"upi://pay?pa={UPI_ID}&pn={NAME}&cu=INR"
-    img = qrcode.make(upi_link)
-    bio = BytesIO()
-    bio.name = "qr.png"
-    img.save(bio, "PNG")
-    bio.seek(0)
-    return bio
+# ===== BUTTON =====
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
 
-# ===== HANDLE =====
-async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    text = update.message.text
+    if query.data in ["1k", "5k", "10k"]:
+        await query.message.reply_text("Send your username:")
+        context.user_data["step"] = "username"
 
-    # PACKAGE SELECT
-    if "Followers" in text:
-        users[user_id] = {"package": text, "step": "username"}
+    elif query.data == "pay":
+        generate_qr()
+        await query.message.reply_photo(photo=open("qr.png", "rb"), caption="Pay and send screenshot")
 
-        await update.message.reply_text("📌 Apna Instagram username bhejo:")
+    elif query.data == "support":
+        await query.message.reply_text("Write your problem here:")
+        context.user_data["step"] = "support"
 
-    # USERNAME
-    elif user_id in users and users[user_id]["step"] == "username":
-        users[user_id]["username"] = text
-        users[user_id]["step"] = "payment"
+# ===== MESSAGE =====
+async def message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get("step") == "username":
+        context.user_data["username"] = update.message.text
+        await update.message.reply_text("Now send payment screenshot")
+        context.user_data["step"] = "screenshot"
 
-        qr = generate_qr()
+    elif context.user_data.get("step") == "support":
+        await context.bot.send_message(chat_id=ADMIN_ID, text=f"Support: {update.message.text}")
+        await update.message.reply_text("Sent to admin ✅")
+        context.user_data["step"] = None
 
-        await update.message.reply_photo(
-            photo=qr,
-            caption=f"💰 {users[user_id]['package']}\n\nUPI: {UPI_ID}\n\n📸 Payment karke screenshot bhejo"
-        )
+# ===== PHOTO =====
+async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get("step") == "screenshot":
+        file = await update.message.photo[-1].get_file()
+        await file.download_to_drive("payment.jpg")
 
-    # SCREENSHOT / PAYMENT
-    elif update.message.photo:
-        await context.bot.forward_message(
+        await context.bot.send_photo(
             chat_id=ADMIN_ID,
-            from_chat_id=update.message.chat_id,
-            message_id=update.message.message_id
+            photo=open("payment.jpg", "rb"),
+            caption=f"Payment from @{update.message.from_user.username}"
         )
 
-        await update.message.reply_text("✅ Payment received! Admin verify karega.")
-
-    # SUPPORT
-    elif "Support" in text:
-        await update.message.reply_text("❓ Apni problem likho:")
-
-    # DEFAULT
-    else:
-        await update.message.reply_text("⚠️ Please valid option select karo.")
-
-# ===== ADMIN VERIFY =====
-async def verify(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return
-
-    if context.args:
-        user_id = int(context.args[0])
-
-        await context.bot.send_message(
-            chat_id=user_id,
-            text="🎉 Payment verified! Followers jaldi deliver honge."
-        )
+        await update.message.reply_text("Payment submitted! Wait for admin approval ✅")
+        context.user_data["step"] = None
 
 # ===== MAIN =====
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("verify", verify))
-    app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO, handle))
+    app.add_handler(CallbackQueryHandler(button))
+    app.add_handler(MessageHandler(filters.TEXT, message))
+    app.add_handler(MessageHandler(filters.PHOTO, photo))
 
     print("Bot running...")
     app.run_polling()
