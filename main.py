@@ -4,7 +4,7 @@ from io import BytesIO
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
-TOKEN = os.getenv("8758864770:AAGsopycO503b7P6S6zs8eKKU_CjYyoCwBs")
+TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = 7705209352
 UPI_ID = "niteshextema@fam"
 NAME = "Nitesh"
