@@ -1,9 +1,10 @@
 import logging
 import qrcode
+import os
 from telegram import Update, ReplyKeyboardMarkup, InputFile
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
-TOKEN = "YOUR_BOT_TOKEN"
+TOKEN = "BOT_TOKEN"
 ADMIN_ID = 7705209352
 UPI_ID = "niteshextema@fam"
 NAME = "Nitesh"
