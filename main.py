@@ -1,21 +1,26 @@
 import logging
-import qrcode
 import os
+import qrcode
+
 from telegram import Update, ReplyKeyboardMarkup, InputFile
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
-TOKEN = "BOT_TOKEN"
+# ===== CONFIG =====
+TOKEN = os.getenv("BOT_TOKEN")   # Railway se token lega
 ADMIN_ID = 7705209352
 UPI_ID = "niteshextema@fam"
 NAME = "Nitesh"
 
-user_data_store = {}
+# ===== LOGGING =====
+logging.basicConfig(level=logging.INFO)
 
+# ===== QR GENERATE =====
 def generate_qr():
     upi_link = f"upi://pay?pa={UPI_ID}&pn={NAME}"
     qr = qrcode.make(upi_link)
     qr.save("qr.png")
 
+# ===== START =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         ["1K Followers - ₹10"],
@@ -25,23 +30,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-    await update.message.reply_text("🔥 Welcome!\n\nChoose a package:", reply_markup=reply_markup)
+    await update.message.reply_text(
+        "🔥 Welcome!\n\nChoose a package:",
+        reply_markup=reply_markup
+    )
 
+# ===== HANDLE MESSAGE =====
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
+    # Package select
     if "Followers" in text:
-        user_data_store[update.effective_user.id] = text
         generate_qr()
 
         await update.message.reply_photo(
             photo=InputFile("qr.png"),
-            caption=f"💰 Pay for {text}\n\n📸 Payment ke baad screenshot bhejo"
+            caption=f"💰 {text}\n\n📸 Payment karne ke baad screenshot bhejo"
         )
 
+    # Support
     elif "Support" in text:
-        await update.message.reply_text("❓ Problem hai? Yaha likho.")
+        await update.message.reply_text("❓ Apni problem likho, admin reply karega.")
 
+    # Screenshot / message admin ko forward
     else:
         await context.bot.forward_message(
             chat_id=ADMIN_ID,
@@ -49,27 +60,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             message_id=update.message.message_id
         )
 
-        await update.message.reply_text("✅ Payment received! Verification pending.")
+        await update.message.reply_text("✅ Payment received! Admin verify karega.")
 
+# ===== ADMIN VERIFY =====
 async def verify(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
 
     if context.args:
         user_id = int(context.args[0])
+
         await context.bot.send_message(
             chat_id=user_id,
-            text="🎉 Payment verified! Followers will be delivered soon."
+            text="🎉 Payment verified! Followers jaldi deliver honge."
         )
 
+# ===== MAIN =====
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("verify", verify))
     app.add_handler(MessageHandler(filters.ALL, handle_message))
 
-    print("🤖 Bot running...")
+    print("🤖 Bot Running...")
     app.run_polling()
